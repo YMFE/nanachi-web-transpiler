@@ -1,0 +1,47 @@
+{
+  "name": "nanachi-web-transpiler",
+  "version": "0.0.1",
+  "description": "nanachi web transpiler",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsc -w"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YMFE/nanachi-web-transpiler.git"
+  },
+  "keywords": [
+    "nanachi"
+  ],
+  "author": "roland_reed",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/YMFE/nanachi-web-transpiler/issues"
+  },
+  "homepage": "https://github.com/YMFE/nanachi-web-transpiler#readme",
+  "dependencies": {
+    "@babel/core": "^7.3.3",
+    "@babel/generator": "^7.3.3",
+    "@babel/parser": "^7.3.3",
+    "@babel/plugin-proposal-class-properties": "^7.3.3",
+    "@babel/plugin-syntax-dynamic-import": "^7.2.0",
+    "@babel/plugin-syntax-jsx": "^7.2.0",
+    "@babel/template": "^7.2.2",
+    "@babel/traverse": "^7.2.3",
+    "@babel/types": "^7.3.3",
+    "chokidar": "^2.1.2",
+    "fs-extra": "^7.0.1",
+    "ramda": "^0.26.1"
+  },
+  "devDependencies": {
+    "@types/babel__generator": "^7.0.2",
+    "@types/babel__template": "^7.0.2",
+    "@types/babel__traverse": "^7.0.6",
+    "@types/fs-extra": "^5.0.5",
+    "@types/ramda": "^0.26.0",
+    "husky": "^1.3.1",
+    "lint-staged": "^8.1.4",
+    "tslint": "^5.13.0",
+    "typescript": "^3.3.3333"
+  }
+}
