@@ -10,7 +10,6 @@ class JavaScriptTransformer extends Asset {
   public code: string = '';
   public sourceCode: string;
 
-  protected transpile: Transpile;
   protected ast: t.File;
   protected traverseOptions: TraverseOptions = {};
 
@@ -29,6 +28,7 @@ class JavaScriptTransformer extends Asset {
   protected async parse() {
     await this.read();
     this.sourceCode = this.content;
+    this.reset();
 
     try {
       this.ast = parser.parse(this.sourceCode, {
@@ -44,7 +44,12 @@ class JavaScriptTransformer extends Asset {
 
   protected generate() {
     const { code } = generate(this.ast.program);
-    this.code = this.content = code;
+
+    this.content = this.code = code;
+  }
+
+  private reset() {
+    this.traverseOptions = {};
   }
 }
 

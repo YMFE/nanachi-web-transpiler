@@ -1,33 +1,42 @@
-import generate from '@babel/generator';
 import template from '@babel/template';
+import { NodePath } from '@babel/traverse';
 import * as t from '@babel/types';
 import JavaScriptTransformer from './javascript';
 
-const importedPagesTemplatePrefixCode = `
+const importedPagesTemplatePrefixCode = template(`
 import Loadable from 'react-loadable';
-import DEFAULT_LOADING from 'DEFAULT_LOADING';
-`;
+import QunarDefaultLoading from '@qunar-default-loading';
+`);
 
 class AppTransformer extends JavaScriptTransformer implements Transformer {
-  public exportedPagesCode: string;
-
-  private importedPages: t.Statement[] = [];
-  private exportedPages: t.ArrayExpression = t.arrayExpression();
-  private buildAsyncImport = template(`
+  private importedPages: t.Statement[];
+  private exportedPages: t.ArrayExpression;
+  private buildAsyncImport = template(
+    `
   const PAGE_NAME = Loadable({
     loader: () => import('IMPORT_PATH'),
-    loading: DEFAULT_LOADING,
-  });`, {
-    plugins: ['dynamicImport']
-  });
+    loading: QunarDefaultLoading,
+    delay: 300
+  });`,
+    {
+      plugins: ['dynamicImport']
+    }
+  );
   private pageIndex: number = 0;
 
   public async transform() {
     await this.parse();
+    this.init();
     this.register();
     this.traverse();
-    this.generate();
     this.generateExportedPagesCode();
+    this.generate();
+    await this.write();
+  }
+
+  private init() {
+    this.importedPages = [];
+    this.exportedPages = t.arrayExpression();
   }
 
   private loadable(importPath: string) {
@@ -52,18 +61,24 @@ class AppTransformer extends JavaScriptTransformer implements Transformer {
     this.extractPages();
     this.modifyAppConfig();
     this.modifyExport();
+    this.requireTabIcons();
   }
 
   private generateExportedPagesCode() {
-    const importPagesCode = generate(t.program(this.importedPages)).code;
-    const exportAst = t.exportDefaultDeclaration(this.exportedPages);
-    const exportPagesCode = generate(exportAst).code;
+    const body = this.ast.program.body;
 
-    this.exportedPagesCode = `
-    ${importedPagesTemplatePrefixCode}
-    ${importPagesCode}
-    ${exportPagesCode}
-    `;
+    body.unshift(...this.importedPages);
+    body.unshift(
+      ...(importedPagesTemplatePrefixCode() as t.ImportDeclaration[])
+    );
+    body.push(
+      t.exportNamedDeclaration(
+        t.variableDeclaration('const', [
+          t.variableDeclarator(t.identifier('Pages'), this.exportedPages)
+        ]),
+        []
+      )
+    );
   }
 
   private extractPages() {
@@ -79,16 +94,37 @@ class AppTransformer extends JavaScriptTransformer implements Transformer {
     });
   }
 
+  private requireTabIcons() {
+    this.registerTraverse({
+      ClassProperty: path => {
+        if (
+          path.get('key').isIdentifier({
+            name: 'config'
+          })
+        ) {
+          path.traverse({
+            Identifier: key => {
+              const name = key.node.name;
+              if (name === 'iconPath' || name === 'selectedIconPath') {
+                const prop = key.findParent(t.isObjectProperty);
+                const value = prop.get('value') as NodePath;
+                value.replaceWith(
+                  t.callExpression(t.identifier('require'), [
+                    t.stringLiteral(`@${(value.node as t.StringLiteral).value}`)
+                  ])
+                );
+              }
+            }
+          });
+        }
+      }
+    });
+  }
+
   private modifyAppConfig() {
     this.registerTraverse({
       ClassDeclaration: path => {
-        const AppConfig = t.classDeclaration(
-          t.identifier('AppConfig'),
-          null,
-          path.get('body').node
-        );
-
-        path.replaceWith(AppConfig);
+        path.get('superClass').remove();
       }
     });
   }
@@ -96,10 +132,12 @@ class AppTransformer extends JavaScriptTransformer implements Transformer {
   private modifyExport() {
     this.registerTraverse({
       ExportDefaultDeclaration: path => {
-        const exportAppConfig = t.exportDefaultDeclaration(
-          t.newExpression(t.identifier('AppConfig'), [])
-        );
-        path.replaceWith(exportAppConfig);
+        if (this.sourceFilePath === this.transpile.appJSPath) {
+          const newApp = path.get('declaration').get('arguments');
+          path
+            .get('declaration')
+            .replaceWith((newApp as any)[0].node as t.NewExpression);
+        }
       }
     });
   }

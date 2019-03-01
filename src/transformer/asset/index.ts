@@ -8,6 +8,8 @@ class Asset {
   public content: string;
   public relativePath: string;
 
+  protected transpile: Transpile;
+
   constructor(sourceFilePath: string, transpile: Transpile) {
     this.sourceFilePath = sourceFilePath;
     this.relativePath = path.relative(transpile.srcDirPath, sourceFilePath);
@@ -15,6 +17,7 @@ class Asset {
       transpile.destDirPath,
       this.relativePath
     );
+    this.transpile = transpile;
   }
 
   public async read() {

@@ -17,6 +17,8 @@ class CSSTransformer extends Asset implements Transformer {
       /(\d+)rpx/g,
       (_, n) => `${n / 100}rem`
     );
+
+    await this.write();
   }
 }
 

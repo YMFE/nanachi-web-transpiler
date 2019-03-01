@@ -1,3 +1,5 @@
+import template from '@babel/template';
+import { NodePath } from '@babel/traverse';
 import * as t from '@babel/types';
 import R from 'ramda';
 import JavaScriptTransformer from './javascript';
@@ -45,6 +47,10 @@ const componentsNameMap: InterfaceComponentsMap = {
   ...internalComponentsMap
 };
 
+const importDynamicPageLoader = template(
+  `import DynamicLoader from '@dynamic-loader';`
+);
+
 class OrdinaryJavaScript extends JavaScriptTransformer implements Transformer {
   private componentNameList: string[] = [];
 
@@ -54,7 +60,13 @@ class OrdinaryJavaScript extends JavaScriptTransformer implements Transformer {
     this.traverse();
     this.insertExternalComponents();
     this.insertInternalComponents();
+    this.insertDynamicLoader();
     this.generate();
+    await this.write();
+  }
+
+  private get isPage() {
+    return /\/pages\//.test(this.sourceFilePath);
   }
 
   private get externalComponentsWaitingImported() {
@@ -71,34 +83,43 @@ class OrdinaryJavaScript extends JavaScriptTransformer implements Transformer {
 
   private insertInternalComponents() {
     this.internalComponentsWaitingImported.forEach(name => {
-      const internalComponentName = `@internalComponents/${name}`;
+      const variableName = componentsNameMap[name];
+      const internalComponentName = `@internalComponents/${variableName}`;
 
       this.program.body.unshift(
         t.importDeclaration(
-          [t.importDefaultSpecifier(t.identifier(name))],
-          t.stringLiteral(internalComponentName),
-          'value'
+          [t.importDefaultSpecifier(t.identifier(variableName))],
+          t.stringLiteral(internalComponentName)
         )
       );
     });
   }
 
+  private insertDynamicLoader() {
+    this.program.body.unshift(
+      t.importDeclaration(
+        [t.importDefaultSpecifier(t.identifier('DynamicPageLoader'))],
+        t.stringLiteral('@dynamic-page-loader')
+      )
+    );
+  }
+
   private insertExternalComponents() {
     this.externalComponentsWaitingImported.forEach(name => {
-      const externalComponentName = `schnee-ui/components/X${name}`;
+      const variableName = componentsNameMap[name];
+      const externalComponentName = `schnee-ui/components/X${variableName}`;
 
       this.program.body.unshift(
         t.importDeclaration(
-          [t.importDefaultSpecifier(t.identifier(name))],
-          t.stringLiteral(externalComponentName),
-          'value'
+          [t.importDefaultSpecifier(t.identifier(variableName))],
+          t.stringLiteral(externalComponentName)
         )
       );
     });
   }
 
   private addComponentName(name: string) {
-    if (this.componentNameList.findIndex(v => v === name) > -1) {
+    if (this.componentNameList.findIndex(v => v === name) === -1) {
       this.componentNameList.push(name);
     }
   }
@@ -106,6 +127,8 @@ class OrdinaryJavaScript extends JavaScriptTransformer implements Transformer {
   private register() {
     this.replaceAssets();
     this.replaceNodeName();
+    this.autoBindThisForArrayMap();
+    this.dynamicLoad();
   }
 
   private replaceNodeName() {
@@ -114,23 +137,100 @@ class OrdinaryJavaScript extends JavaScriptTransformer implements Transformer {
         const componentAttr = path.get('name');
 
         if (t.isJSXIdentifier(componentAttr)) {
-          const componentName = componentAttr.name;
+          const componentName = (componentAttr.node as t.JSXIdentifier).name;
           const replaceName = componentsNameMap[componentName];
 
           this.addComponentName(componentName);
 
           if (replaceName) {
-            componentAttr.name = replaceName;
-          }
+            (componentAttr.node as t.JSXIdentifier).name = replaceName;
 
-          if (!path.get('selfClosing')) {
-            const closeElement = path.find(t.isJSXClosingElement);
-            const componentCloseAttr = closeElement.get('name');
+            if (!path.node.selfClosing) {
+              const closingElement = (path.container as t.JSXElement)
+                .closingElement;
 
-            if (t.isJSXIdentifier(componentCloseAttr)) {
-              componentCloseAttr.name = replaceName;
+              ((closingElement as t.JSXClosingElement)
+                .name as t.JSXIdentifier).name = replaceName;
             }
           }
+        }
+      }
+    });
+  }
+
+  private dynamicLoad() {
+    this.registerTraverse({
+      ExportDefaultDeclaration: path => {
+        const page = path.get('declaration');
+
+        if (page.isFunctionDeclaration()) {
+          page.replaceWith(
+            t.callExpression(t.identifier('DynamicPageLoader'), [
+              t.functionExpression(
+                page.node.id,
+                page.node.params,
+                page.node.body,
+                page.node.generator,
+                page.node.async
+              )
+            ])
+          );
+        } else {
+          // SPECIAL CASE
+          // 组件不应该和 Page 也一样经过 DynamicPageLoader 函数包装
+          if (this.isPage) {
+            page.replaceWith(
+              t.callExpression(t.identifier('DynamicPageLoader'), [
+                page.node as t.Identifier
+              ])
+            );
+          }
+        }
+      }
+    });
+  }
+
+  private autoBindThisForArrayMap() {
+    this.registerTraverse({
+      ClassMethod: path => {
+        if (
+          path.get('key').isIdentifier({
+            name: 'render'
+          })
+        ) {
+          path.traverse({
+            CallExpression: fn => {
+              const callee = fn.get('callee');
+
+              if (callee.isMemberExpression()) {
+                const property = callee.get('property') as NodePath;
+
+                if (property.isIdentifier()) {
+                  if (property.node.name === 'map') {
+                    const args = fn.node.arguments;
+
+                    if (args.length < 2) {
+                      args.push(t.thisExpression());
+                    }
+                  }
+                }
+              }
+            },
+            JSXAttribute: attr => {
+              const name = attr.get('name');
+              if (name.isJSXIdentifier()) {
+                const attrName = name.node.name;
+
+                if (/^catch/.test(attrName)) {
+                  name.node.name = attrName.replace(/^catch/, 'on');
+                }
+
+                if (attrName === 'onTap') {
+                  name.node.name = 'onClick';
+                }
+              }
+            }
+          });
         }
       }
     });
@@ -172,11 +272,15 @@ class OrdinaryJavaScript extends JavaScriptTransformer implements Transformer {
             originalAssetsFilePath
           ) as string[];
 
-          path.replaceWith(
-            t.callExpression(t.identifier('require'), [
-              t.stringLiteral(`@assets${replacedAssetsFilePath}`)
-            ])
-          );
+          path
+            .get('value')
+            .replaceWith(
+              t.jsxExpressionContainer(
+                t.callExpression(t.identifier('require'), [
+                  t.stringLiteral(`@assets${replacedAssetsFilePath}`)
+                ])
+              )
+            );
         }
       }
     });

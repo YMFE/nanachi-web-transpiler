@@ -38,9 +38,9 @@ class Transpile {
   public sourceDirName: string;
   public intermediateRootDir: string;
   public intermediateDirName: string;
+  public appJSPath: string;
   private staticAssetsMap: InterfaceStaticAssetsMap = {};
   private assetsMap: InterfaceAssetsMap = {};
-  private appJSPath: string;
   private watcher: chokidar.FSWatcher;
 
   constructor({
@@ -55,7 +55,11 @@ class Transpile {
     this.sourceDirName = sourceDirName;
     this.intermediateDirName = intermediateDirName;
     this.intermediateRootDir = intermediateRootDir;
-    this.appJSPath = path.resolve(this.srcRootDir, this.sourceDirName, 'app.js');
+    this.appJSPath = path.resolve(
+      this.srcRootDir,
+      this.sourceDirName,
+      'app.js'
+    );
   }
 
   public get srcDirPath() {
@@ -86,7 +90,7 @@ class Transpile {
   public async watch() {
     await this.collectAndTranspile();
 
-    this.watcher.on('change', this.onFileChange);
+    this.watcher.on('change', filePath => this.onFileChange(filePath));
   }
 
   private get allAssets() {
@@ -181,4 +185,5 @@ class Transpile {
 }
 
 export default Transpile;
+
 module.exports = Transpile;
