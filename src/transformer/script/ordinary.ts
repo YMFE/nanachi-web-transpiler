@@ -1,55 +1,12 @@
-import template from '@babel/template';
 import { NodePath } from '@babel/traverse';
 import * as t from '@babel/types';
 import R from 'ramda';
+import {
+  componentsNameMap,
+  internalComponentsMap,
+  nativeComponentsMap
+} from './componentsNameMap';
 import JavaScriptTransformer from './javascript';
-
-interface InterfaceComponentsMap {
-  [property: string]: string;
-}
-
-const webComponentsMap: InterfaceComponentsMap = {
-  text: 'span',
-  view: 'div',
-  stack: 'div',
-  block: 'div',
-  'web-view': 'iframe',
-  'scroll-view': 'div'
-};
-
-const nativeComponentsMap: InterfaceComponentsMap = {
-  button: 'Button',
-  checkbox: 'Checkbox',
-  icon: 'Icon',
-  progress: 'Progress',
-  radio: 'Radio',
-  'scorll-view': 'ScorllView',
-  switch: 'Switch',
-  'checkbox-group': 'CheckboxGroup',
-  label: 'Label',
-  'radio-group': 'RadioGroup'
-};
-
-const internalComponentsMap: InterfaceComponentsMap = {
-  image: 'Image',
-  slider: 'Slider',
-  textarea: 'Textarea',
-  swiper: 'Swiper',
-  'swiper-item': 'SwiperItem',
-  'rich-text': 'RichText',
-  audio: 'Audio',
-  picker: 'Picker'
-};
-
-const componentsNameMap: InterfaceComponentsMap = {
-  ...webComponentsMap,
-  ...nativeComponentsMap,
-  ...internalComponentsMap
-};
-
-const importDynamicPageLoader = template(
-  `import DynamicLoader from '@dynamic-loader';`
-);
 
 class OrdinaryJavaScript extends JavaScriptTransformer implements Transformer {
   private componentNameList: string[] = [];
@@ -163,21 +120,7 @@ class OrdinaryJavaScript extends JavaScriptTransformer implements Transformer {
       ExportDefaultDeclaration: path => {
         const page = path.get('declaration');
 
-        if (page.isFunctionDeclaration()) {
-          page.replaceWith(
-            t.callExpression(t.identifier('DynamicPageLoader'), [
-              t.functionExpression(
-                page.node.id,
-                page.node.params,
-                page.node.body,
-                page.node.generator,
-                page.node.async
-              )
-            ])
-          );
-        } else {
-          // SPECIAL CASE
-          // 组件不应该和 Page 也一样经过 DynamicPageLoader 函数包装
+        if (page.isIdentifier()) {
           if (this.isPage) {
             page.replaceWith(
               t.callExpression(t.identifier('DynamicPageLoader'), [
