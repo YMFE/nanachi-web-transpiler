@@ -136,7 +136,7 @@ class AppTransformer extends JavaScriptTransformer implements Transformer {
           const newApp = path.get('declaration').get('arguments');
           path
             .get('declaration')
-            .replaceWith((newApp as any)[0].node as t.NewExpression);
+            .replaceWith((newApp as any)[0].node);
         }
       }
     });
