@@ -1,5 +1,4 @@
 import template from '@babel/template';
-import { NodePath } from '@babel/traverse';
 import * as t from '@babel/types';
 import JavaScriptTransformer from './javascript';
 
@@ -103,16 +102,25 @@ class AppTransformer extends JavaScriptTransformer implements Transformer {
           })
         ) {
           path.traverse({
-            Identifier: key => {
-              const name = key.node.name;
+            ObjectProperty: property => {
+              const { key, value } = property.node;
+              let name: string = '';
+
+              if (t.isIdentifier(key)) name = key.name;
+              if (t.isStringLiteral(key)) name = key.value;
+
               if (name === 'iconPath' || name === 'selectedIconPath') {
-                const prop = key.findParent(t.isObjectProperty);
-                const value = prop.get('value') as NodePath;
-                value.replaceWith(
-                  t.callExpression(t.identifier('require'), [
-                    t.stringLiteral(`@${(value.node as t.StringLiteral).value}`)
-                  ])
-                );
+                if (t.isStringLiteral(value)) {
+                  property
+                    .get('value')
+                    .replaceWith(
+                      t.callExpression(t.identifier('require'), [
+                        t.stringLiteral(
+                          `@${value.value.replace(/^(\.\/)/, '')}`
+                        )
+                      ])
+                    );
+                }
               }
             }
           });
@@ -134,9 +142,7 @@ class AppTransformer extends JavaScriptTransformer implements Transformer {
       ExportDefaultDeclaration: path => {
         if (this.sourceFilePath === this.transpile.appJSPath) {
           const newApp = path.get('declaration').get('arguments');
-          path
-            .get('declaration')
-            .replaceWith((newApp as any)[0].node);
+          path.get('declaration').replaceWith((newApp as any)[0].node);
         }
       }
     });

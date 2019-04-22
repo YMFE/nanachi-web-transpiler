@@ -1,4 +1,3 @@
-// import generate = require('@babel/generator');
 import generate from '@babel/generator';
 import parser = require('@babel/parser');
 import traverse, { TraverseOptions } from '@babel/traverse';
